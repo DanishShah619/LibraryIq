@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   db:
@@ -38,8 +37,6 @@ services:
     env_file: .env
     ports:
       - "8000:8000"
-    volumes:
-      - ./ml/model.joblib:/app/model.joblib:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s

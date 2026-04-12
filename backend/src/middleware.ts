@@ -1,12 +1,13 @@
-import { auth } from "@/lib/auth";
+import { authConfig } from "@/lib/auth.config";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import NextAuth from "next-auth";
 
 // Routes accessible only to admins (SUPER_ADMIN or LIBRARIAN)
 const ADMIN_ROUTES = ["/admin"];
 // Routes requiring authentication
 const PROTECTED_ROUTES = ["/dashboard", "/loans", "/recommendations", "/profile", "/leaderboard"];
-
+const { auth } = NextAuth(authConfig);
 export default auth(async (req: NextRequest & { auth: any }) => {
   const { pathname } = req.nextUrl;
   const session = req.auth;
