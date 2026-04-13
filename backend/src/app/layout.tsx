@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -15,6 +15,14 @@ export const metadata: Metadata = {
   description:
     "AI-powered library management platform with personalised recommendations, gamification, and automated reminders.",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "LibraIQ",
+  },
+};
+
+export const viewport: Viewport = {
   themeColor: "#6366f1",
 };
 

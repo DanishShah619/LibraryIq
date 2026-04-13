@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 
 const DEFAULT_LENDING_DAYS = 14;
 const _MAX_RENEWALS = 2;
+const MAX_ACTIVE_BORROWINGS = 5;
 
 // POST /api/borrowings — borrow a book
 export async function POST(req: NextRequest) {
@@ -36,6 +37,12 @@ export async function POST(req: NextRequest) {
       });
       if (existing) throw new Error("AlreadyBorrowed");
 
+      // Check max borrowing limit
+      const userActiveCount = await tx.borrowing.count({
+        where: { userId: session.user!.id, status: { in: ["ACTIVE", "RENEWED", "OVERDUE"] } },
+      });
+      if (userActiveCount >= MAX_ACTIVE_BORROWINGS) throw new Error("MaxBorrowLimitReached");
+
       const dueDate = addDays(new Date(), DEFAULT_LENDING_DAYS);
       const userId = session.user!.id as string;
       return tx.borrowing.create({
@@ -53,6 +60,7 @@ export async function POST(req: NextRequest) {
     if (err.message === "NotFound")      return NextResponse.json({ error: "Book not found" }, { status: 404 });
     if (err.message === "Unavailable")   return NextResponse.json({ error: "No copies available" }, { status: 409 });
     if (err.message === "AlreadyBorrowed") return NextResponse.json({ error: "You already have this book" }, { status: 409 });
+    if (err.message === "MaxBorrowLimitReached") return NextResponse.json({ error: `You have reached the maximum limit of ${MAX_ACTIVE_BORROWINGS} borrowed books` }, { status: 403 });
     console.error("[POST /api/borrowings]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

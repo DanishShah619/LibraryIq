@@ -1,11 +1,24 @@
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+process.env.DATABASE_URL = process.env.DATABASE_URL; // keep existing override
+require("dotenv").config({ override: false }); 
 
-const prisma = new PrismaClient();
+
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
+const { Pool } = require("pg");
+const bcrypt = require("bcryptjs");
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL,
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+console.log("Connecting to:", process.env.DATABASE_URL);
 
 async function main() {
   console.log("🌱 Seeding database...");
-
+const genres = [];
   // ── Genres ──────────────────────────────────────────────────────────
   const genreNames = [
     "Fiction", "Non-fiction", "Science Fiction", "Fantasy", "Mystery",
@@ -14,10 +27,12 @@ async function main() {
     "Dystopian", "Adventure", "Horror", "Crime", "Coming-of-Age",
   ];
 
-  const genres = await Promise.all(
-    genreNames.map((name) => prisma.genre.upsert({ where: { name }, create: { name }, update: {} }))
-  );
-  console.log(`✅ Seeded ${genres.length} genres`);
+  
+for (const name of genreNames) {
+  const genre = await prisma.genre.upsert({ where: { name }, create: { name }, update: {} });
+  genres.push(genre);
+}
+console.log(`✅ Seeded ${genres.length} genres`);
 
   // ── Badges ──────────────────────────────────────────────────────────
   const badges = [
@@ -28,9 +43,9 @@ async function main() {
     { key: "loyal_reader",   name: "Loyal Reader",      description: "Actively borrowed books for 6 consecutive months", iconUrl: "💎" },
   ];
 
-  await Promise.all(
-    badges.map((b) => prisma.badge.upsert({ where: { key: b.key }, create: b, update: b }))
-  );
+ for (const b of badges) {
+  await prisma.badge.upsert({ where: { key: b.key }, create: b, update: b });
+}
   console.log(`✅ Seeded ${badges.length} badges`);
 
   // ── Super Admin ──────────────────────────────────────────────────────
