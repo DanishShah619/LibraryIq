@@ -55,6 +55,17 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      ml:
+        condition: service_healthy
+
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
 
 volumes:
   postgres_data:

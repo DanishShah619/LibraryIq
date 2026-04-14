@@ -1,8 +1,9 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { BookOpen, Calendar, Globe, Hash, Building2 } from "lucide-react";
+import { BookOpen, Calendar, Globe, Hash, Building2, ArrowLeft } from "lucide-react";
 import BorrowReserveOwn from "@/components/books/BorrowReserveOwn";
+import Link from "next/link";
 
 export async function generateMetadata({ params }: { params: { id: string } }) {
   const book = await prisma.book.findFirst({
@@ -56,7 +57,15 @@ export default async function BookDetailPage({ params }: { params: { id: string 
   const genres = book.genres.map((bg) => bg.genre.name);
 
   return (
-    <div className="max-w-4xl animate-fade-in">
+    <div className="max-w-4xl animate-fade-in space-y-6">
+      <Link 
+        href="/catalogue" 
+        className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors w-fit bg-gray-800/40 px-3 py-1.5 rounded-lg border border-gray-700 hover:border-gray-600"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Catalogue
+      </Link>
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Cover */}
         <div className="md:col-span-1">

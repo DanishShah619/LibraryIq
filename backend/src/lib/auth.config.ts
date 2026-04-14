@@ -25,5 +25,20 @@ export const authConfig: NextAuthConfig = {
     authorized() {
       return true; // let middleware.ts handle redirects
     },
+    jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.role = (user as any).role;
+      }
+      return token;
+    },
+    session({ session, token }) {
+      if (token && session.user) {
+        session.user.id = token.id as string;
+        (session.user as any).role = token.role;
+        (session.user as any).isActive = token.isActive;
+      }
+      return session;
+    },
   },
 };

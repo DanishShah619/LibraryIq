@@ -2,7 +2,10 @@ import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet, cacheDel, KEYS } from "@/lib/redis";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ 
+  baseURL: "https://api.groq.com/openai/v1",
+  apiKey: process.env.GROQ_API_KEY, 
+});
 
 export async function getAIRecommendations(userId: string): Promise<string[]> {
   // Check Redis cache first
@@ -56,7 +59,7 @@ ${negativeFeedback.length > 0 ? `Avoid books similar to IDs: ${negativeFeedback.
 Return ONLY a comma-separated list of 10 ISBNs, no other text.`;
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "llama-3.1-8b-instant",
     messages: [{ role: "user", content: prompt }],
     max_tokens: 200,
     temperature: 0.7,

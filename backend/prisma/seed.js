@@ -22,9 +22,9 @@ const genres = [];
   // ── Genres ──────────────────────────────────────────────────────────
   const genreNames = [
     "Fiction", "Non-fiction", "Science Fiction", "Fantasy", "Mystery",
-    "Thriller", "Romance", "Historical Fiction", "Biography", "Self-help",
+    "Thriller", "Historical Fiction", "Biography", "Self-help",
     "Psychology", "Science", "Philosophy", "Young Adult", "Classic",
-    "Dystopian", "Adventure", "Horror", "Crime", "Coming-of-Age",
+    "Dystopian", "Adventure", "Horror", "Crime", "Coming-of-Age","Geopolitics","History","Economics"
   ];
 
   
