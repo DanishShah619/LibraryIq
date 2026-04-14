@@ -60,12 +60,15 @@ services:
 
   ml:
     build:
-      context: ./ml
+      context: "./recommendation engine"
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file: .env
     ports:
       - "8000:8000"
+    volumes:
+      - chroma_data:/app/chroma_db
 
 volumes:
   postgres_data:
+  chroma_data:

@@ -1,0 +1,103 @@
+# ── docker-compose.yml additions for the ML service ──────────────────────────
+#
+# Add the ml service and chroma_data volume to your existing docker-compose.yml.
+# The full updated services section is shown below.
+#
+# Key points:
+#   - chroma_data volume persists the ChromaDB index across container restarts
+#     (Improvement 3 — avoids 60-90s index rebuild on every restart)
+#   - web depends on ml so the app only starts after the ML service is healthy
+#   - ML_SERVICE_SECRET must match between the web and ml containers
+#   - start_period: 60s accounts for first-run index build time
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # These can also live in .env — shown here for clarity
+      ML_SERVICE_SECRET: ${ML_SERVICE_SECRET}
+      REDIS_URL: redis://redis:6379
+      DATA_PATH: data/books_with_emotions.csv
+      CHROMA_PERSIST_DIR: /app/chroma_db
+    ports:
+      - "8000:8000"
+    volumes:
+      # Improvement 3: persist ChromaDB index so it survives container restarts
+      # First start will build the index (~60-90s); every subsequent start loads in ~1s
+      - chroma_data:/app/chroma_db
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s   # first run builds index; subsequent starts are fast
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    env_file: .env
+    restart: no
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      ml:
+        condition: service_healthy   # wait for ML service to be ready
+
+volumes:
+  postgres_data:
+  chroma_data:   # persisted ChromaDB vector index

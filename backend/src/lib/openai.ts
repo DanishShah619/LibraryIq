@@ -8,6 +8,7 @@ const openai = new OpenAI({
 });
 
 export async function getAIRecommendations(userId: string): Promise<string[]> {
+  console.log(`\n[AI Recs] Initiating recommendation pipeline for user: ${userId}`);
   // Check Redis cache first
   const cached = await cacheGet<string[]>(KEYS.aiRecs(userId));
   if (cached) return cached;
@@ -25,7 +26,10 @@ export async function getAIRecommendations(userId: string): Promise<string[]> {
     },
   });
 
-  if (!user || user.borrowings.length === 0) return [];
+  if (!user || user.borrowings.length === 0) {
+    console.log(`[AI Recs] User ${userId} has no active/recent borrowings. Aborting recommendation engine.`);
+    return [];
+  }
 
   // Build prompt context
   const recentTitles = user.borrowings.slice(0, 5).map((b) => b.book.title);
@@ -49,38 +53,76 @@ export async function getAIRecommendations(userId: string): Promise<string[]> {
   const _positiveFeedback = latestRec?.feedback.filter((f) => f.isPositive).map((f) => f.bookId) ?? [];
   const negativeFeedback = latestRec?.feedback.filter((f) => !f.isPositive).map((f) => f.bookId) ?? [];
 
-  const prompt = `You are a library recommendation engine. Based on the following reading profile, recommend 10 ISBN codes (just ISBNs, comma-separated) for books this member would enjoy:
-
+  const prompt = `You are a library recommendation engine. Based on the following reading profile, describe the absolute perfect book for this member to read next in 1 or 2 incredibly detailed sentences. Do NOT list specific titles or authors in your output. Only describe the ideal world, pacing, tension, aesthetics, and tropes they would enjoy.
+  
 Top genres: ${topGenres.join(", ")}
 Favourite authors: ${topAuthors.join(", ") || "N/A"}
 Recently read: ${recentTitles.join("; ")}
-${negativeFeedback.length > 0 ? `Avoid books similar to IDs: ${negativeFeedback.join(", ")}` : ""}
+${negativeFeedback.length > 0 ? `Themes to desperately avoid: ${negativeFeedback.join(", ")}` : ""}
 
-Return ONLY a comma-separated list of 10 ISBNs, no other text.`;
+Return ONLY the plain-text narrative description. Do not write anything else.`;
+
+  console.log(`[AI Recs] Firing request to Groq API (Model: llama-3.1-8b-instant)...`);
 
   const completion = await openai.chat.completions.create({
     model: "llama-3.1-8b-instant",
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 200,
+    max_tokens: 150,
     temperature: 0.7,
   });
 
-  const raw = completion.choices[0]?.message?.content?.trim() || "";
-  const isbns = raw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 10);
+  const descriptionPayload = completion.choices[0]?.message?.content?.trim() || "";
+  console.log(`[AI Recs] Groq API response successfully received! Dream Book Hypothesis: "${descriptionPayload}"`);
 
-  // Find matching books in our catalogue
+  if (!descriptionPayload) {
+    console.log(`[AI Recs] FATAL: Groq API failed to build a hypothesis description.`);
+    return [];
+  }
+
+  // 1. Pass the generated text directly over the Docker Docker Subnet to the ML Core!
+  console.log(`[AI Recs] Initiating internal pipeline transfer to Local ML Container...`);
+  const mlUrl = process.env.NODE_ENV === "production" ? "http://ml:8000/predict" : (process.env.ML_SERVICE_URL || "http://ml:8000/predict");
+  
+  let mlData;
+  try {
+    const mlRes = await fetch(mlUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.ML_SERVICE_SECRET || ""}`
+      },
+      body: JSON.stringify({ 
+        query: descriptionPayload,
+        top_k: 10 
+      }),
+      cache: 'no-store'
+    });
+
+    if (!mlRes.ok) throw new Error(await mlRes.text());
+    mlData = await mlRes.json();
+  } catch(e) {
+    console.error(`[AI Recs] FATAL ML SERVER COMMUNICATION ERROR:`, e);
+    return [];
+  }
+
+  // 2. Parse the true database-native ISBNs extracted by ChromaDb ML Pipeline
+  // Note: the new semantic engine returns `isbn13` instead of the old `isbn`
+  const isbns = mlData.recommendations.map((r: any) => r.isbn13);
+  console.log(`[AI Recs] ChromaDB ML Container responded with ${isbns.length} guaranteed internal stock items!`);
+
   const books = await prisma.book.findMany({
     where: { isbn: { in: isbns }, isDeleted: false },
     select: { id: true },
   });
   const bookIds = books.map((b) => b.id);
 
-  // Store in DB
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   await prisma.aIRecommendation.create({ data: { userId, bookIds, expiresAt } });
 
   // Cache in Redis for 24h
   await cacheSet(KEYS.aiRecs(userId), bookIds, 86400);
+
+  console.log(`[AI Recs] Successfully routed ${bookIds.length} hybrid books to Database UUIDs. Engine cycle complete!\n`);
 
   return bookIds;
 }

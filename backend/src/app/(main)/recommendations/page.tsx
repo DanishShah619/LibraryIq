@@ -30,7 +30,7 @@ function BookTile({
       {/* Cover */}
       <div className="w-full h-40 rounded-lg bg-gray-800 flex items-center justify-center overflow-hidden">
         {book.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
+          
           <img src={book.coverUrl} alt={book.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
         ) : (
           <BookOpen className="w-8 h-8 text-gray-600" />
@@ -88,23 +88,35 @@ export default function RecommendationsPage() {
   const [mlBooks, setMlBooks] = useState<Book[]>([]);
   const [mlLoading, setMlLoading] = useState(false);
   const [mlQuery, setMlQuery] = useState("");
-  const [mlType, setMlType] = useState<"genre" | "description">("genre");
+  const [mlCategory, setMlCategory] = useState("All");
+  const [mlTone, setMlTone] = useState("All");
+  
+  const [metaCategories, setMetaCategories] = useState<string[]>(["All"]);
+  const [metaTones, setMetaTones] = useState<string[]>(["All"]);
   const [mlError, setMlError] = useState("");
 
-  // Load AI recs on mount
+  // Load AI recs and ML Metadata on mount
   useEffect(() => {
-    async function loadAI() {
+    async function loadResources() {
+      // 1. Load Groq Profile AI Recs
       setAiLoading(true);
       const res = await fetch("/api/recommendations/ai");
       if (res.ok) {
         const data = await res.json();
         setAiBooks(data.recommendations || []);
         setAiMessage(data.message || "");
-        // Find rec ID from most recent AI recommendation (not returned by API, but we store it for feedback)
       }
       setAiLoading(false);
+
+      // 2. Load ML Dropdown Meta-data Vectors
+      const metaRes = await fetch("/api/recommendations/ml");
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        if (meta.categories) setMetaCategories(meta.categories);
+        if (meta.tones) setMetaTones(meta.tones);
+      }
     }
-    loadAI();
+    loadResources();
   }, []);
 
   async function refreshAI() {
@@ -132,7 +144,7 @@ export default function RecommendationsPage() {
     setMlLoading(true);
     setMlError("");
     setMlBooks([]);
-    const body = mlType === "genre" ? { genre: mlQuery } : { description: mlQuery };
+    const body = { query: mlQuery, category: mlCategory, tone: mlTone };
     const res = await fetch("/api/recommendations/ml", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -209,22 +221,25 @@ export default function RecommendationsPage() {
         </div>
 
         <div className="glass-card p-5 space-y-4">
-          {/* Type toggle */}
-          <div className="flex gap-2">
-            {(["genre", "description"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setMlType(t)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  mlType === t ? "bg-purple-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
-                }`}
-              >
-                {t === "genre" ? "By Genre" : "By Description"}
-              </button>
-            ))}
-          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Semantic Layout Modifiers */}
+            <select
+              value={mlCategory}
+              onChange={(e) => setMlCategory(e.target.value)}
+              className="input-base bg-gray-800 text-sm py-2 px-3 sm:max-w-[150px]"
+            >
+              {metaCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
 
-          <div className="flex gap-2">
+            <select
+              value={mlTone}
+              onChange={(e) => setMlTone(e.target.value)}
+              className="input-base bg-gray-800 text-sm py-2 px-3 sm:max-w-[150px]"
+            >
+              {metaTones.map(tone => <option key={tone} value={tone}>{tone} Tone</option>)}
+            </select>
+
+            {/* Core Semantic Query Bar */}
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
@@ -232,11 +247,7 @@ export default function RecommendationsPage() {
                 value={mlQuery}
                 onChange={(e) => setMlQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && searchML()}
-                placeholder={
-                  mlType === "genre"
-                    ? "e.g. Science Fiction, Mystery, Romance…"
-                    : "e.g. A thriller about a detective in 1920s Paris…"
-                }
+                placeholder="Describe the world, aesthetic, characters, pacing or scenario you want to explore..."
                 className="input-base pl-10 w-full"
               />
             </div>

@@ -1,6 +1,20 @@
+/**
+ * POST /api/recommendations/ml
+ *
+ * Next.js proxy to the ML microservice.
+ * Implements FR-ML-03: members never call the ML service directly.
+ * Implements Improvement 14: resolves isbn13 → LibraIQ book cuid before storing.
+ *
+ * Request body:
+ *   { query: string, category?: string, tone?: string, top_k?: number }
+ *
+ * Response:
+ *   { recommendations: Book[], query: string, cached: boolean }
+ */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://ml:8000";
@@ -35,27 +49,9 @@ interface MLResponse {
   latency_ms: number;
 }
 
-export async function GET() {
-  try {
-    const res = await fetch(`${ML_SERVICE_URL}/meta`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${ML_SERVICE_SECRET}`,
-      },
-      next: { revalidate: 3600 } // Cache metadata aggressively
-    });
-    
-    if (!res.ok) return NextResponse.json({ error: "Meta unavailable" }, { status: 502 });
-    const data = await res.json();
-    return NextResponse.json(data);
-  } catch (_err) {
-    return NextResponse.json({ error: "ML service unreachable" }, { status: 502 });
-  }
-}
-
 export async function POST(req: NextRequest) {
   // Auth check
-  const session = await auth();
+  const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -97,8 +93,8 @@ export async function POST(req: NextRequest) {
     }
 
     mlData = await mlRes.json();
-  } catch (_err) {
-    console.error("[ml-proxy] Failed to reach ML service:", _err);
+  } catch (err) {
+    console.error("[ml-proxy] Failed to reach ML service:", err);
     return NextResponse.json(
       { error: "ML service unreachable" },
       { status: 502 }
@@ -178,9 +174,9 @@ export async function POST(req: NextRequest) {
           scores: resolvedRecommendations.map((r) => r.confidence),
         },
       });
-    } catch (_err) {
+    } catch (err) {
       // Non-fatal: log but don't fail the response
-      console.error("[ml-proxy] Failed to persist MLRecommendation:", _err);
+      console.error("[ml-proxy] Failed to persist MLRecommendation:", err);
     }
   }
 
